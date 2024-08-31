@@ -1,0 +1,536 @@
+---
+title: "Covid-19 Classification Using Hybrid Transfer Learning"
+date: "`r Sys.Date()`"
+output: html_document
+author: "ODIGIE BENISON BLESSING"
+runtime: html_document
+---
+
+```{r setup, include=FALSE}
+
+ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+   
+```
+# About Data Analysis Report
+
+
+**Data Description:**
+
+
+# Task One: Import data and data preprocessing
+
+
+```{r, echo=FALSE}
+rm(list = ls())
+# Data wrangling
+library(tidyverse)
+
+#randomforest
+library(randomForest)
+
+# Image manipulation
+library(imager)
+
+# Deep learning
+library(keras)
+library(stringr)
+
+# Model Evaluation
+library(caret)
+library(reticulate)
+
+#conda_create(envname=miniconda,python_version = miniconda_python_version())
+# use conda env
+use_condaenv("C:/Users/ODIGIE/miniconda3/envs/tf_new")
+conda_list()
+options(reticulate.conda_binary ="C:/Users/ODIGIE/miniconda3/envs/tf_new")
+options(scipen = 999)
+#reticulate::py_install("tensorflow==2.8.0")
+#NumPy 1.21.2
+reticulate::py_config()
+#source_python("c:/skin_cancer_prediction/LBP_feature_extraction.py")
+#from skimage.feature import local_binary_pattern
+# Import scikit-image
+```
+
+
+# Function Declarations Modules
+
+```{r,echo=FALSE}
+
+# Function to convert image to array
+image_prep <- function(x) {
+  arrays <- lapply(x, function(path) {
+    img <- image_load(path, target_size = target_size, color_mode = "grayscale")
+    
+    x <- image_to_array(img)
+    x <- array_reshape(x, c(1, dim(x)))
+    x <- x/255 # rescale image pixel
+  })
+  do.call(abind::abind, c(arrays, list(along = 1)))
+}
+
+
+# Convert encoding to label
+decode <- function(x){
+  case_when(x == 1 ~ "Normal",
+            x == 0 ~ "COVID-19"
+  )
+}
+
+# Function for acquiring width and height of an image
+# reduce image size but retain image quality using lanczos interpolation
+#img_resized <- resize(img, size = c(28, 28), interp = "bicubic")
+get_dim <- function(x){
+  img <- load.image(x) 
+  #Resize image but use lanczos interpolation to retain image quality 
+  img <- resize(img, 28,28,interpolation_type=6)
+ 
+  df_img <- data.frame(height = height(img),
+                       width = width(img),
+                       filename = x
+  )
+  
+  return(df_img)
+}
+
+
+read_images<-function(img_files){
+    lbp_features <- matrix(0,nrow = length(img_files), ncol = 26)
+  
+# Loop through each images in folder 1
+for (i in 1:length(img_files)) {
+  # Load the image
+  img <- file.path(img_folder, img_files[i])
+  hist <- extract_lbp_features(img)
+  # Store the CLBP features
+  lbp_features[i, ] <- hist
+}
+
+  return(lbp_features)
+}
+
+
+```
+
+
+# Data Loading
+
+
+```{r,echo=FALSE}
+
+dataset_train="c:/skin_cancer_prediction/dataset_train/"
+dataset_val="c:/skin_cancer_prediction/dataset_val/"
+
+folder_list <- list.files(dataset_train)
+
+#folder_list
+folder_path <- paste0(dataset_train, folder_list, "/")
+
+
+# Get file name
+file_name <- map(folder_path, 
+                 function(x) paste0(x, list.files(x))
+) %>% 
+  unlist()
+
+# Randomly select image
+set.seed(99)
+sample_image <- sample(file_name, 6,replace=TRUE)
+
+# Load image into R
+img <- map(sample_image, load.image)
+
+# Plot image
+par(mfrow = c(2, 3)) # Create 2 x 3 image grid
+map(img, plot)
+
+
+# Full Image Description
+img <- resize(load.image(file_name[1]),28,28)
+plot(img)
+
+# Image Dimension
+dim(img)
+
+# Randomly get 1000 sample images
+set.seed(123)
+sample_file <- sample(file_name, 500)
+
+# Run the get_dim() function for each image
+file_dim <- map_df(sample_file, get_dim)
+
+
+```
+
+
+# Data Augmentation
+
+
+```{r,echo=FALSE}
+# Desired height and width of images
+# Run the get_dim() function for each image
+file_dim <- map_df(sample_file, get_dim)
+
+#head(file_dim, 500)
+
+#summary(file_dim)
+weight<-file_dim[1,1]
+height<-file_dim[1,2]
+
+#Data Augmentation
+# Desired height and width of images
+target_size <- c(weight, height)
+
+# Batch size for training the model
+batch_size <- 75
+
+set.seed(100)
+# Image Generator
+train_data_gen <- image_data_generator(rescale = 1/255,
+                                       zoom_range = 0.25, # Zoom in or zoom out range
+                                       validation_split = 0.3, # 20% data as validation data
+                                       fill_mode = "nearest"
+                                       
+)
+
+#Training and Validation Datasets
+set.seed(100)
+
+# Training Dataset
+train_image_array_gen <- flow_images_from_directory(directory = dataset_train, # Folder of the data
+                                                    target_size = target_size, # target of the image dimension (28 x 28)  
+                                                    color_mode = "grayscale", # use grayscale color
+                                                    batch_size = batch_size , 
+                                                    seed = 100,  # set random seed
+                                                    shuffle=TRUE,
+                                                    
+                                                    subset = "training", # declare that this is for training data
+                                                    generator = train_data_gen
+)
+
+# Validation Dataset
+val_image_array_gen <- flow_images_from_directory(directory = dataset_val,
+                                                  target_size = target_size, 
+                                                  color_mode = "grayscale", 
+                                                  batch_size = batch_size ,
+                                                  seed = 100,
+                                                  subset = "validation", # declare that this is the validation data
+                                                  generator = train_data_gen
+)
+
+```
+
+
+# Training and Validation Datasets splitting
+
+```{r ,echo=FALSE}
+
+
+
+```
+
+# Data Proportion
+```{r ,echo=FALSE}
+#Balanced data proportions across subsets help ensure that the model is exposed to a representative variety of examples during training, enabling it to learn effectively across different classes or categories. A proper data proportion in the validation set is equally important, as it ensures a fair assessment of the model’s performance on unseen data.
+#Data Proportion
+set.seed(100)
+# Number of training samples
+train_samples <- train_image_array_gen$n
+
+# Number of validation samples
+valid_samples <- val_image_array_gen$n
+
+# Number of target classes/categories
+output_n <- n_distinct(train_image_array_gen$classes)
+tail(train_image_array_gen$classes)
+# Get the class proportion
+table("\nFrequency" = factor(train_image_array_gen$classes)
+) %>% 
+  prop.table()
+
+train_samples
+valid_samples
+head(val_image_array_gen$filenames)
+val_image_array_gen$filepaths[1]
+
+train_image_array_gen$classes
+```
+
+# LBP Random Forest 
+
+```{r,echo=FALSE}
+# Initialize a matrix to store LBP features
+
+train_lbp_features_traing <- read_images(train_image_array_gen$filepaths)
+val_lbp_features_traing <- read_images(val_image_array_gen$filepaths)
+
+
+  # Train Random Forest model
+rf_model <- randomForest(class ~ ., data=train_data, ntree=100)
+
+# Make predictions on test data
+predictions <- round(predict(rf_model, test_data))
+
+# Evaluate model performance
+confusionMatrix <- table(test_data$class, predictions)
+print(confusionMatrix)
+
+
+  
+```
+
+# CNN Model Architecture
+
+
+```{r,echo=FALSE}
+#A Model Architecture that utilizes Convolutional Neural Network (CNN) is a structural representation of how the CNN is organized to process and analyze visual data, such as images. This model consists of a series of layers that have unique functions in feature extraction and transformation. With the right structure and configuration, a CNN architecture is capable of addressing the challenges of image analysis. The careful utilization of these layers allows the model to learn and represent essential features in visual data efficiently and accurately.
+
+# input shape of the image
+# Set Initial Random Weight
+tensorflow::tf$random$set_seed(100)
+
+model <- keras_model_sequential(name = "simple_model") %>% 
+  
+  # Convolution Layer
+  layer_conv_2d(filters = 32,
+                kernel_size = c(3,3),
+                padding = "same",
+                activation = "relu",
+                input_shape = c(target_size, 1) 
+  ) %>% 
+  
+  layer_batch_normalization() %>%
+  
+  # Max Pooling Layer
+  layer_max_pooling_2d(pool_size = c(2,2)) %>% 
+  
+  # Flattening Layer
+  layer_flatten() %>% 
+  
+  # Dense Layer
+  layer_dense(units = 128,
+              activation = "relu") %>% 
+  layer_dropout(rate = 0.5) %>%  # Add dropout layer
+  
+  # Dense Layer
+  layer_dense(units = 64,
+              activation = "relu") %>%
+  layer_dropout(rate = 0.5) %>%  # Add dropout layer
+  
+  # Output Layer
+  layer_dense(units = output_n,activation = "softmax",name = "Output")
+
+model
+```
+
+
+# CNN Model fitting
+
+```{r,echo=FALSE}
+tensorflow::tf$random$set_seed(123)
+model %>% 
+  compile(
+    loss = "categorical_crossentropy",
+    optimizer = optimizer_adam(learning_rate = 0.001, beta_1 = 0.9),
+    metrics = "accuracy"
+  )
+
+
+model %>% summary()
+
+# Fit data into model
+history <- model %>% 
+  fit(
+    # training data
+    train_image_array_gen,
+    
+    # training epochs
+    steps_per_epoch = as.integer(train_samples / batch_size), 
+    epochs = 15, 
+    
+    # validation data
+    validation_data = val_image_array_gen,
+    validation_steps = as.integer(valid_samples / batch_size)
+  )
+
+plot(history)
+
+```
+
+# CNN Model Evaluation
+
+```{r eruptions, echo=FALSE}
+set.seed(100)
+val_data <- data.frame(file_name = paste0(dataset_val, val_image_array_gen$filenames)) %>% 
+  mutate(class = str_extract(val_image_array_gen$labels, "0|1"))
+
+val_data$class
+
+
+# Create DAta Validation
+test_x <- image_prep(val_data$file_name)
+
+# Check dimension of testing data set
+dim(test_x)
+
+set.seed(100)
+# Get the class proportion
+table("\nFrequency" = factor(val_image_array_gen$classes)
+) %>% 
+  prop.table()
+
+#Prediction Data Evaluation
+#Prediction Data Evaluation
+set.seed(100)
+pred_test <- predict(model, test_x)%>% 
+  k_argmax() %>% # untuk mengambil nilai probability paling besar
+  as.array() %>% 
+  as.factor()
+
+pred_test
+
+
+```
+
+# Matric Evaluation
+
+```{r, echo=FALSE}
+
+#Matric Evaluation
+s_conf <- confusionMatrix(as.factor(pred_test),as.factor(val_data$class))
+
+s_conf
+
+
+
+pred_test <- sapply(pred_test, decode) 
+pred_test2 <- sapply(val_data$class, decode) 
+
+head(pred_test)
+tail(pred_test2)
+
+table(as.factor(pred_test), as.factor(val_data$class))
+
+```
+
+# CNN model Tuning
+
+
+```{r, echo=FALSE}
+
+tensorflow::tf$random$set_seed(123)
+
+model_big  <-  keras_model_sequential(name = "tuning_model") %>% 
+  
+  # Convolution Layer
+  layer_conv_2d(filters = 32,
+                kernel_size = c(3,3),
+                padding = "same",
+                activation = "relu",
+                input_shape = c(target_size, 1) 
+  ) %>% 
+  
+  layer_batch_normalization() %>%
+  
+  # Max Pooling Layer
+  layer_max_pooling_2d(pool_size = c(2,2)) %>% 
+  
+  # Flattening Layer
+  layer_flatten() %>% 
+  
+  # Dense Layer
+  layer_dense(units = 256,
+              activation = "relu") %>% 
+  layer_dropout(rate = 0.5) %>%  # Add dropout layer
+  
+  # Dense Layer
+  layer_dense(units = 128,
+              activation = "relu") %>%
+  layer_dropout(rate = 0.5) %>%  # Add dropout layer
+  
+  # Output Layer
+  layer_dense(units = output_n,
+              activation = "softmax",
+              name = "Output")
+model_big
+
+tensorflow::set_random_seed(100)
+
+# Create Early Stopping Callback
+early_stopping <- callback_early_stopping(monitor = "val_loss", patience = 10)
+
+model_big %>% 
+  compile(
+    loss = loss_categorical_crossentropy(),
+    optimizer_adam(learning_rate = 0.001, beta_1 = 0.9),
+    metrics = "accuracy"
+  )
+
+
+
+history <- model_big %>% 
+  fit(
+    # training data
+    train_image_array_gen,
+    
+    # epochs
+    steps_per_epoch = as.integer(train_samples / batch_size), 
+    epochs = 15, #21 #35
+    
+    # validation data
+    validation_data = val_image_array_gen,
+    validation_steps = as.integer(valid_samples / batch_size),
+    
+    # Use Early Stopping Callback
+    callbacks = list(early_stopping)
+  )
+
+plot(history)
+
+#Prediction Data Evaluation
+set.seed(100)
+pred_test2 <- predict(model_big, test_x)%>% 
+  k_argmax() %>% # untuk mengambil nilai probability paling besar
+  as.array() %>% 
+  as.factor()
+
+pred_test2
+
+#Matric Evaluation
+s_conf <- confusionMatrix(as.factor(pred_test2),as.factor(val_data$class))
+
+s_conf
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
